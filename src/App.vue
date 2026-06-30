@@ -1,337 +1,791 @@
 <script setup>
-import { ref } from 'vue';
-import BmiCalculator from './components/BmiCalculator.vue';
-import BmiResults from './components/BmiResults.vue';
-import DietPlanView from './components/DietPlanView.vue';
-import HealthyTips from './components/HealthyTips.vue';
+import { computed, ref, watch } from 'vue';
 
-// App state
-const hasCalculated = ref(false);
-const activeTab = ref('dashboard'); // 'dashboard', 'dietPlan', 'tips'
-const userStats = ref(null);
+const theme = ref('dark');
+const units = ref('metric');
+const age = ref(28);
+const gender = ref('male');
+const weightKg = ref(70);
+const heightCm = ref(175);
+const weightLbs = ref(154);
+const feet = ref(5);
+const inches = ref(9);
+const activity = ref('moderate');
+const goal = ref('maintain');
+const planStyle = ref('balanced');
+const mealsPerDay = ref(3);
+const result = ref(null);
+const mealPlan = ref([]);
+const newMealName = ref('');
+const newMealCalories = ref(300);
+const newMealProtein = ref(20);
+const newMealCarbs = ref(35);
+const newMealFat = ref(10);
+const selectedFood = ref('');
+const mealEntryMode = ref('manual');
+const customFoodName = ref('');
+const customFoodCalories = ref(250);
+const customFoodProtein = ref(20);
+const customFoodCarbs = ref(30);
+const customFoodFat = ref(10);
+const foodDatabase = [
+  { name: 'Chicken Breast', calories: 165, protein: 31, carbs: 0, fat: 3.6 },
+  { name: 'Salmon', calories: 208, protein: 22, carbs: 0, fat: 13 },
+  { name: 'Eggs', calories: 72, protein: 6, carbs: 0.4, fat: 5 },
+  { name: 'Oats', calories: 389, protein: 16, carbs: 66, fat: 7 },
+  { name: 'Rice', calories: 130, protein: 2.7, carbs: 28, fat: 0.3 },
+  { name: 'Banana', calories: 105, protein: 1.3, carbs: 27, fat: 0.4 },
+  { name: 'Greek Yogurt', calories: 100, protein: 10, carbs: 6, fat: 4 },
+  { name: 'Apple', calories: 95, protein: 0.5, carbs: 25, fat: 0.3 },
+  { name: 'Tofu', calories: 144, protein: 17, carbs: 3, fat: 9 },
+  { name: 'Lentils', calories: 116, protein: 9, carbs: 20, fat: 0.4 },
+];
 
-const handleCalculate = (data) => {
-  userStats.value = data;
-  hasCalculated.value = true;
-  activeTab.value = 'dashboard';
+const activityFactors = {
+  sedentary: 1.2,
+  light: 1.375,
+  moderate: 1.55,
+  active: 1.725,
 };
 
-const handleReset = () => {
-  userStats.value = null;
-  hasCalculated.value = false;
+const planProfiles = {
+  balanced: { protein: 0.25, carbs: 0.45, fat: 0.3, note: 'Balanced meals with steady energy' },
+  highProtein: { protein: 0.35, carbs: 0.35, fat: 0.3, note: 'Higher protein for muscle support' },
+  vegetarian: { protein: 0.25, carbs: 0.5, fat: 0.25, note: 'Plant-forward choices and legumes' },
+  lowCarb: { protein: 0.3, carbs: 0.25, fat: 0.45, note: 'Lower carb, higher fat approach' },
 };
 
-// Calculations for calculations within App context for targets
-const targetCalories = ref(1500);
+const swapSuggestions = {
+  balanced: [
+    { name: 'Greek Yogurt Bowl', calories: 320, protein: 24, carbs: 30, fat: 10, notes: 'Yogurt, berries, granola' },
+    { name: 'Chicken Wrap', calories: 410, protein: 32, carbs: 38, fat: 14, notes: 'Chicken, lettuce, wrap' },
+    { name: 'Salmon Plate', calories: 480, protein: 35, carbs: 25, fat: 22, notes: 'Salmon, rice, greens' },
+  ],
+  highProtein: [
+    { name: 'Protein Oats', calories: 360, protein: 30, carbs: 35, fat: 12, notes: 'Oats, whey, banana' },
+    { name: 'Turkey Salad', calories: 390, protein: 40, carbs: 20, fat: 15, notes: 'Turkey, beans, greens' },
+    { name: 'Egg Rice Bowl', calories: 450, protein: 33, carbs: 35, fat: 16, notes: 'Eggs, rice, vegetables' },
+  ],
+  vegetarian: [
+    { name: 'Tofu Stir Fry', calories: 360, protein: 24, carbs: 32, fat: 14, notes: 'Tofu, vegetables, rice' },
+    { name: 'Lentil Soup', calories: 330, protein: 20, carbs: 40, fat: 8, notes: 'Lentils, carrots, herbs' },
+    { name: 'Chickpea Salad', calories: 400, protein: 18, carbs: 44, fat: 14, notes: 'Chickpeas, cucumber, olive oil' },
+  ],
+  lowCarb: [
+    { name: 'Avocado Eggs', calories: 340, protein: 18, carbs: 8, fat: 28, notes: 'Eggs, avocado, spinach' },
+    { name: 'Chicken Salad', calories: 380, protein: 34, carbs: 10, fat: 24, notes: 'Chicken, greens, olive oil' },
+    { name: 'Cottage Cheese Plate', calories: 300, protein: 24, carbs: 12, fat: 18, notes: 'Cottage cheese, nuts, cucumber' },
+  ],
+};
 
-const handleCalculateTarget = (stats) => {
-  const { weight, height, age, gender, activityLevel, goal } = stats;
-  // BMR Calculation
-  let bmrVal = 0;
-  if (gender === 'male') {
-    bmrVal = 10 * weight + 6.25 * height - 5 * age + 5;
-  } else {
-    bmrVal = 10 * weight + 6.25 * height - 5 * age - 161;
+const toggleTheme = () => {
+  theme.value = theme.value === 'dark' ? 'light' : 'dark';
+};
+
+const currentHeightCm = computed(() => {
+  if (units.value === 'metric') {
+    return Number(heightCm.value);
   }
-  // TDEE Activity Factor
-  const factors = {
-    sedentary: 1.2,
-    lightly_active: 1.375,
-    moderately_active: 1.55,
-    active: 1.725
+  return Number(feet.value) * 30.48 + Number(inches.value) * 2.54;
+});
+
+const currentWeightKg = computed(() => {
+  if (units.value === 'metric') {
+    return Number(weightKg.value);
+  }
+  return Number(weightLbs.value) * 0.45359237;
+});
+
+const buildDefaultMealPlan = (targetCalories) => {
+  const mealCount = Number(mealsPerDay.value);
+  const profile = planProfiles[planStyle.value];
+  const baseMeals = [
+    { name: 'Breakfast', notes: 'Start with energy and fibre' },
+    { name: 'Lunch', notes: 'Balanced protein and vegetables' },
+    { name: 'Dinner', notes: 'Lean protein and greens' },
+    { name: 'Snack', notes: 'Small recovery meal' },
+    { name: 'Evening Meal', notes: 'Light and satisfying' },
+  ];
+
+  const distribution = mealCount === 3
+    ? [0.28, 0.35, 0.37]
+    : mealCount === 4
+      ? [0.23, 0.27, 0.3, 0.2]
+      : [0.2, 0.24, 0.24, 0.16, 0.16];
+
+  return baseMeals.slice(0, mealCount).map((meal, index) => {
+    const calories = Math.round((targetCalories / mealCount) * distribution[index]);
+    return {
+      ...meal,
+      calories,
+      protein: Math.round((calories * profile.protein) / 4),
+      carbs: Math.round((calories * profile.carbs) / 4),
+      fat: Math.round((calories * profile.fat) / 9),
+    };
+  });
+};
+
+const syncMealPlan = (targetCalories = null) => {
+  const target = targetCalories ?? (result.value?.goalCalories ? Number(result.value.goalCalories) : 2000);
+  const desiredCount = Number(mealsPerDay.value);
+
+  if (mealPlan.value.length === 0) {
+    mealPlan.value = buildDefaultMealPlan(target);
+    return;
+  }
+
+  if (mealPlan.value.length < desiredCount) {
+    const extras = buildDefaultMealPlan(target).slice(mealPlan.value.length, desiredCount);
+    mealPlan.value = [...mealPlan.value, ...extras];
+  } else if (mealPlan.value.length > desiredCount) {
+    mealPlan.value = mealPlan.value.slice(0, desiredCount);
+  }
+};
+
+const calculateCalories = () => {
+  const weightValue = currentWeightKg.value;
+  const heightValue = currentHeightCm.value;
+  const ageValue = Number(age.value);
+
+  const bmr = gender.value === 'male'
+    ? 10 * weightValue + 6.25 * heightValue - 5 * ageValue + 5
+    : 10 * weightValue + 6.25 * heightValue - 5 * ageValue - 161;
+
+  const tdee = bmr * (activityFactors[activity.value] || 1.2);
+  let goalLabel = 'Maintenance Calories';
+  let goalCalories = tdee;
+
+  if (goal.value === 'lose') {
+    goalLabel = 'Weight Loss';
+    goalCalories = Math.max(1200, tdee - 500);
+  } else if (goal.value === 'gain') {
+    goalLabel = 'Weight Gain';
+    goalCalories = tdee + 400;
+  }
+
+  const bmi = weightValue / ((heightValue / 100) ** 2);
+
+  result.value = {
+    bmi: bmi.toFixed(1),
+    bmr: Math.round(bmr),
+    tdee: Math.round(tdee),
+    goalCalories: Math.round(goalCalories),
+    goalLabel,
   };
-  const factor = factors[activityLevel] || 1.2;
-  const tdeeVal = bmrVal * factor;
 
-  // Calorie Target
-  let target = tdeeVal;
-  if (goal === 'lose') {
-    target = Math.max(1200, tdeeVal - 500);
-  } else if (goal === 'gain') {
-    target = tdeeVal + 400;
+  syncMealPlan(Math.round(goalCalories));
+};
+
+const resetForm = () => {
+  age.value = 28;
+  gender.value = 'male';
+  weightKg.value = 70;
+  heightCm.value = 175;
+  weightLbs.value = 154;
+  feet.value = 5;
+  inches.value = 9;
+  activity.value = 'moderate';
+  goal.value = 'maintain';
+  planStyle.value = 'balanced';
+  mealsPerDay.value = 3;
+  result.value = null;
+  mealPlan.value = [];
+  newMealName.value = '';
+  newMealCalories.value = 300;
+  newMealProtein.value = 20;
+  newMealCarbs.value = 35;
+  newMealFat.value = 10;
+};
+
+const bmiCategory = computed(() => {
+  if (!result.value) return 'Enter your details to see your result.';
+
+  const bmiValue = Number(result.value.bmi);
+  if (bmiValue < 18.5) return 'Underweight';
+  if (bmiValue < 25) return 'Healthy';
+  if (bmiValue < 30) return 'Overweight';
+  return 'Obese';
+});
+
+const idealWeightRange = computed(() => {
+  if (!result.value) return null;
+
+  const heightValue = currentHeightCm.value;
+  const minWeight = (18.5 * (heightValue / 100) ** 2).toFixed(1);
+  const maxWeight = (24.9 * (heightValue / 100) ** 2).toFixed(1);
+
+  return `${minWeight} - ${maxWeight} ${units.value === 'metric' ? 'kg' : 'lbs'}`;
+});
+
+const macroTargets = computed(() => {
+  const target = result.value?.goalCalories ? Number(result.value.goalCalories) : 2000;
+  const profile = planProfiles[planStyle.value];
+
+  return {
+    calories: target,
+    protein: Math.round((target * profile.protein) / 4),
+    carbs: Math.round((target * profile.carbs) / 4),
+    fat: Math.round((target * profile.fat) / 9),
+    note: profile.note,
+  };
+});
+
+const fillFoodMacros = () => {
+  const food = foodDatabase.find((item) => item.name === selectedFood.value);
+  if (!food) return;
+
+  newMealName.value = food.name;
+  newMealCalories.value = food.calories;
+  newMealProtein.value = food.protein;
+  newMealCarbs.value = food.carbs;
+  newMealFat.value = food.fat;
+};
+
+const addCustomFood = () => {
+  if (!customFoodName.value.trim()) return;
+
+  const exists = foodDatabase.some((food) => food.name.toLowerCase() === customFoodName.value.trim().toLowerCase());
+  if (exists) {
+    customFoodName.value = '';
+    return;
   }
-  
-  targetCalories.value = Math.round(target);
+
+  foodDatabase.push({
+    name: customFoodName.value.trim(),
+    calories: Number(customFoodCalories.value) || 250,
+    protein: Number(customFoodProtein.value) || 20,
+    carbs: Number(customFoodCarbs.value) || 30,
+    fat: Number(customFoodFat.value) || 10,
+  });
+
+  customFoodName.value = '';
+  customFoodCalories.value = 250;
+  customFoodProtein.value = 20;
+  customFoodCarbs.value = 30;
+  customFoodFat.value = 10;
 };
 
-// Intercept calculations to trigger target updates
-const processCalculation = (data) => {
-  handleCalculateTarget(data);
-  handleCalculate(data);
+const addCustomMeal = () => {
+  if (!newMealName.value.trim()) return;
+
+  mealPlan.value.push({
+    name: newMealName.value.trim(),
+    calories: Number(newMealCalories.value) || 250,
+    protein: Number(newMealProtein.value) || 20,
+    carbs: Number(newMealCarbs.value) || 30,
+    fat: Number(newMealFat.value) || 10,
+    notes: 'Added by user',
+  });
+
+  newMealName.value = '';
+  newMealCalories.value = 250;
+  newMealProtein.value = 20;
+  newMealCarbs.value = 30;
+  newMealFat.value = 10;
+  selectedFood.value = '';
 };
+
+const removeMeal = (index) => {
+  mealPlan.value.splice(index, 1);
+};
+
+const swapMeal = (index) => {
+  const pool = swapSuggestions[planStyle.value] || swapSuggestions.balanced;
+  const suggestion = pool[(index + Math.floor(Math.random() * pool.length)) % pool.length];
+  mealPlan.value[index] = {
+    ...mealPlan.value[index],
+    ...suggestion,
+  };
+};
+
+watch([planStyle, mealsPerDay], () => {
+  if (result.value) {
+    syncMealPlan(Number(result.value.goalCalories));
+  }
+});
 </script>
 
 <template>
-  <div class="app-container">
-    <!-- Navbar / Header -->
-    <header class="app-header print-hide">
-      <div class="header-logo">
-        <span class="logo-icon">🥗</span>
-        <div class="logo-text">
-          <h1>TandooriFit</h1>
-          <span>Smart Pakistani Diet Planner</span>
+  <div class="app-shell" :class="theme">
+    <div class="card">
+      <div class="header-row">
+        <div>
+          <h1>Calorie Calculator</h1>
+          <p>Estimate your BMI, BMR, TDEE, and daily calorie target.</p>
+        </div>
+        <div class="header-actions">
+          <button type="button" class="toggle-btn" @click="units = units === 'metric' ? 'imperial' : 'metric'">
+            {{ units === 'metric' ? 'Switch to Imperial' : 'Switch to Metric' }}
+          </button>
+          <button type="button" class="toggle-btn secondary" @click="toggleTheme">
+            {{ theme === 'dark' ? '☀️ Light' : '🌙 Dark' }}
+          </button>
         </div>
       </div>
-      <button v-if="hasCalculated" class="reset-btn" @click="handleReset">
-        🔄 Restart Calculator
-      </button>
-    </header>
 
-    <!-- Main Container -->
-    <main class="main-content">
-      <!-- Welcome Intro (Form mode) -->
-      <section v-if="!hasCalculated" class="welcome-intro print-hide">
-        <h2 class="welcome-title">Achieve Your Fitness Goals with Local Foods 🇵🇰</h2>
-        <p class="welcome-desc">
-          Calculate your BMI using regional South Asian medical guidelines and generate a clear, easy-to-understand 
-          diet plan based on roti, lentils, grilled kebabs, seasonal fruits, and cardamom tea. No complex western recipes needed!
-        </p>
-      </section>
+      <form class="form" @submit.prevent="calculateCalories">
+        <label>
+          Age
+          <input v-model.number="age" type="number" min="10" max="100" />
+        </label>
 
-      <!-- Calculator Form -->
-      <BmiCalculator v-if="!hasCalculated" @calculate="processCalculation" />
+        <label>
+          Gender
+          <select v-model="gender">
+            <option value="male">Male</option>
+            <option value="female">Female</option>
+          </select>
+        </label>
 
-      <!-- Results Mode (Tabs Dashboard) -->
-      <div v-else class="results-dashboard-wrapper">
-        <!-- Dashboard Navigation Tabs -->
-        <div class="dashboard-tabs print-hide">
-          <button 
-            class="tab-btn" 
-            :class="{ active: activeTab === 'dashboard' }"
-            @click="activeTab = 'dashboard'"
-          >
-            📊 BMI & Calories
-          </button>
-          <button 
-            class="tab-btn" 
-            :class="{ active: activeTab === 'dietPlan' }"
-            @click="activeTab = 'dietPlan'"
-          >
-            📋 Pakistani Diet Plan
-          </button>
-          <button 
-            class="tab-btn" 
-            :class="{ active: activeTab === 'tips' }"
-            @click="activeTab = 'tips'"
-          >
-            💡 Healthy Habits
-          </button>
+        <label v-if="units === 'metric'">
+          Weight (kg)
+          <input v-model.number="weightKg" type="number" min="30" max="300" />
+        </label>
+        <label v-else>
+          Weight (lbs)
+          <input v-model.number="weightLbs" type="number" min="66" max="660" />
+        </label>
+
+        <label v-if="units === 'metric'">
+          Height (cm)
+          <input v-model.number="heightCm" type="number" min="100" max="250" />
+        </label>
+        <div v-else class="height-row">
+          <label>
+            Feet
+            <input v-model.number="feet" type="number" min="3" max="8" />
+          </label>
+          <label>
+            Inches
+            <input v-model.number="inches" type="number" min="0" max="11" />
+          </label>
         </div>
 
-        <!-- Render active tab component -->
-        <div class="tab-content-panel">
-          <BmiResults 
-            v-show="activeTab === 'dashboard'" 
-            :stats="userStats" 
-          />
-          <DietPlanView 
-            v-show="activeTab === 'dietPlan' || activeTab === 'all' /* Keep accessible for printing */" 
-            :targetCalories="targetCalories" 
-            :goal="userStats.goal"
-          />
-          <HealthyTips 
-            v-show="activeTab === 'tips'" 
-          />
+        <label>
+          Activity
+          <select v-model="activity">
+            <option value="sedentary">Sedentary</option>
+            <option value="light">Light</option>
+            <option value="moderate">Moderate</option>
+            <option value="active">Active</option>
+          </select>
+        </label>
+
+        <label>
+          Goal
+          <select v-model="goal">
+            <option value="maintain">Maintain</option>
+            <option value="lose">Lose</option>
+            <option value="gain">Gain</option>
+          </select>
+        </label>
+
+        <label>
+          Plan Style
+          <select v-model="planStyle">
+            <option value="balanced">Balanced</option>
+            <option value="highProtein">High Protein</option>
+            <option value="vegetarian">Vegetarian</option>
+            <option value="lowCarb">Low Carb</option>
+          </select>
+        </label>
+
+        <label>
+          Meals per Day
+          <select v-model="mealsPerDay">
+            <option :value="3">3 meals</option>
+            <option :value="4">4 meals</option>
+            <option :value="5">5 meals</option>
+          </select>
+        </label>
+
+        <div class="actions">
+          <button type="submit">Calculate</button>
+          <button type="button" class="secondary" @click="resetForm">Reset</button>
+        </div>
+      </form>
+
+      <div v-if="result" class="result-card">
+        <div class="result-header">
+          <h2>Your result</h2>
+          <span class="badge">{{ bmiCategory }}</span>
+        </div>
+        <div class="result-grid">
+          <div class="result-item">
+            <span class="label">BMI</span>
+            <strong>{{ result.bmi }}</strong>
+          </div>
+          <div class="result-item">
+            <span class="label">Ideal Weight</span>
+            <strong>{{ idealWeightRange }}</strong>
+          </div>
+          <div class="result-item">
+            <span class="label">BMR</span>
+            <strong>{{ result.bmr }} kcal/day</strong>
+          </div>
+          <div class="result-item">
+            <span class="label">TDEE</span>
+            <strong>{{ result.tdee }} kcal/day</strong>
+          </div>
+          <div class="result-item full">
+            <span class="label">{{ result.goalLabel }}</span>
+            <strong>{{ result.goalCalories }} kcal/day</strong>
+          </div>
         </div>
       </div>
-    </main>
 
-    <!-- Footer -->
-    <footer class="app-footer print-hide">
-      <p>© 2026 TandooriFit. Tailored nutritional planning for Pakistani lifestyles.</p>
-    </footer>
+      <div v-if="result" class="diet-card">
+        <h3>Custom Diet Plan</h3>
+        <p class="diet-note">{{ macroTargets.note }}</p>
+        <div class="macro-grid">
+          <div><strong>Calories</strong><span>{{ macroTargets.calories }} kcal</span></div>
+          <div><strong>Protein</strong><span>{{ macroTargets.protein }}g</span></div>
+          <div><strong>Carbs</strong><span>{{ macroTargets.carbs }}g</span></div>
+          <div><strong>Fat</strong><span>{{ macroTargets.fat }}g</span></div>
+        </div>
+
+        <div class="add-meal-box">
+          <select v-model="selectedFood" @change="mealEntryMode === 'auto' && fillFoodMacros()">
+            <option value="">Choose a food</option>
+            <option v-for="food in foodDatabase" :key="food.name" :value="food.name">
+              {{ food.name }}
+            </option>
+          </select>
+          <select v-model="mealEntryMode">
+            <option value="manual">Enter macros manually</option>
+            <option value="auto">Auto-fill macros</option>
+          </select>
+          <input v-model="newMealName" placeholder="Meal name" />
+          <input v-model.number="newMealCalories" type="number" min="0" placeholder="Calories" />
+          <input v-model.number="newMealProtein" type="number" min="0" placeholder="Protein" />
+          <input v-model.number="newMealCarbs" type="number" min="0" placeholder="Carbs" />
+          <input v-model.number="newMealFat" type="number" min="0" placeholder="Fat" />
+          <button type="button" class="add-btn" @click="addCustomMeal">Add Meal</button>
+        </div>
+
+        <div class="custom-food-box">
+          <h4>Add your own food</h4>
+          <div class="custom-food-row">
+            <input v-model="customFoodName" placeholder="Food name" />
+            <input v-model.number="customFoodCalories" type="number" min="0" placeholder="Calories" />
+            <input v-model.number="customFoodProtein" type="number" min="0" placeholder="Protein" />
+            <input v-model.number="customFoodCarbs" type="number" min="0" placeholder="Carbs" />
+            <input v-model.number="customFoodFat" type="number" min="0" placeholder="Fat" />
+            <button type="button" class="add-btn" @click="addCustomFood">Save Food</button>
+          </div>
+        </div>
+
+        <div class="meal-list">
+          <div v-for="(meal, index) in mealPlan" :key="index" class="meal-item">
+            <div class="meal-editor">
+              <input v-model="meal.name" class="meal-input" placeholder="Meal name" />
+              <div class="meal-macro-row">
+                <input v-model.number="meal.calories" type="number" min="0" />
+                <input v-model.number="meal.protein" type="number" min="0" />
+                <input v-model.number="meal.carbs" type="number" min="0" />
+                <input v-model.number="meal.fat" type="number" min="0" />
+              </div>
+              <textarea v-model="meal.notes" rows="2" placeholder="What you ate" />
+            </div>
+            <div class="meal-actions">
+              <button type="button" class="swap-btn" @click="swapMeal(index)">Swap</button>
+              <button type="button" class="remove-btn" @click="removeMeal(index)">Remove</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
-<style>
-/* Reset and Global variables defined here so it applies app-wide */
-:root {
-  --font-family: 'Outfit', 'Inter', system-ui, sans-serif;
-  --bg-dark: #0f172a;
-  --bg-card: rgba(30, 41, 59, 0.45);
-  --border-light: rgba(255, 255, 255, 0.08);
-  --primary-color: #10b981;
-  --primary-gradient: linear-gradient(135deg, #10b981 0%, #059669 100%);
-  --accent-color: #06b6d4;
-  --text-main: #f8fafc;
-  --text-muted: #94a3b8;
-}
-
-body {
-  margin: 0;
-  padding: 0;
-  background-color: var(--bg-dark);
-  color: var(--text-main);
-  font-family: var(--font-family);
-  min-height: 100vh;
-  background-image: 
-    radial-gradient(at 0% 0%, rgba(16, 185, 129, 0.1) 0px, transparent 50%),
-    radial-gradient(at 50% 0%, rgba(6, 182, 212, 0.08) 0px, transparent 50%),
-    radial-gradient(at 100% 100%, rgba(30, 41, 59, 0.6) 0px, transparent 50%);
-  background-attachment: fixed;
-  background-size: cover;
-  -webkit-font-smoothing: antialiased;
-}
-
-#app {
-  max-width: 100% !important;
-  margin: 0 !important;
-  padding: 0 !important;
-  display: block !important;
-}
-
-@media (min-width: 1024px) {
-  body {
-    display: block !important;
-  }
-}
-</style>
-
 <style scoped>
-.app-container {
-  display: flex;
-  flex-direction: column;
-  min-height: 100vh;
-  padding: 0 1.5rem;
-  max-width: 1200px;
-  margin: 0 auto;
+:global(body) {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
 }
 
-.app-header {
+:global(*) {
+  box-sizing: border-box;
+}
+
+.app-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  transition: background 0.25s ease, color 0.25s ease;
+}
+
+.app-shell.dark {
+  --bg: #0f172a;
+  --card: #111827;
+  --text: #f8fafc;
+  --muted: #94a3b8;
+  --border: #334155;
+  --input-bg: #1f2937;
+  --primary: #10b981;
+  --secondary: #64748b;
+}
+
+.app-shell.light {
+  --bg: #f8fafc;
+  --card: #ffffff;
+  --text: #111827;
+  --muted: #475569;
+  --border: #d1d5db;
+  --input-bg: #f9fafb;
+  --primary: #059669;
+  --secondary: #64748b;
+}
+
+.card {
+  width: min(100%, 620px);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+}
+
+.header-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: start;
+  margin-bottom: 16px;
+}
+
+.header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+h1, h2 {
+  margin-top: 0;
+  margin-bottom: 6px;
+}
+
+p {
+  color: var(--muted);
+  margin-top: 0;
+}
+
+.form {
+  display: grid;
+  gap: 12px;
+}
+
+label {
+  display: grid;
+  gap: 6px;
+  font-weight: 600;
+}
+
+.height-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+input, select, button {
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  font-size: 1rem;
+}
+
+input, select {
+  background: var(--input-bg);
+  color: var(--text);
+}
+
+.actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+button {
+  cursor: pointer;
+  background: var(--primary);
+  color: white;
+  border: none;
+}
+
+button.secondary, .toggle-btn {
+  background: var(--secondary);
+}
+
+.result-card, .diet-card {
+  margin-top: 20px;
+  padding: 18px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.14), rgba(6, 182, 212, 0.08));
+  border: 1px solid rgba(16, 185, 129, 0.28);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+}
+
+.result-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 2rem 0;
-  border-bottom: 1px solid var(--border-light);
-  margin-bottom: 2rem;
+  margin-bottom: 12px;
 }
 
-.header-logo {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-}
-
-.logo-icon {
-  font-size: 2.5rem;
-}
-
-.logo-text h1 {
-  font-size: 1.5rem;
-  font-weight: 800;
-  color: #fff;
-  margin: 0;
-  line-height: 1.1;
-  letter-spacing: -0.5px;
-}
-
-.logo-text span {
-  font-size: 0.8rem;
+.badge {
+  background: rgba(16, 185, 129, 0.18);
+  color: var(--text);
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 0.86rem;
   font-weight: 600;
-  color: var(--primary-color);
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
 }
 
-.reset-btn {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid var(--border-light);
-  color: #fff;
-  padding: 10px 18px;
-  border-radius: 10px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.3s ease;
-}
-
-.reset-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.2);
-}
-
-.main-content {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 2rem;
-  margin-bottom: 4rem;
-}
-
-.welcome-intro {
-  text-align: center;
-  max-width: 750px;
-  margin: 2rem auto;
-  display: flex;
-  flex-direction: column;
-  gap: 0.8rem;
-}
-
-.welcome-title {
-  font-size: 2.2rem;
-  font-weight: 800;
-  color: #fff;
-  letter-spacing: -0.8px;
-  line-height: 1.2;
-}
-
-.welcome-desc {
-  font-size: 1rem;
-  color: var(--text-muted);
-  line-height: 1.6;
-}
-
-.dashboard-tabs {
-  display: flex;
+.result-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
-  background: rgba(0, 0, 0, 0.2);
-  padding: 6px;
-  border-radius: 14px;
-  margin-bottom: 2rem;
-  border: 1px solid var(--border-light);
 }
 
-.tab-btn {
-  flex: 1;
-  padding: 12px;
-  font-size: 0.95rem;
-  font-weight: 700;
-  background: transparent;
-  color: var(--text-muted);
-  border: none;
+.result-item {
+  padding: 10px 12px;
   border-radius: 10px;
-  cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  background: rgba(255, 255, 255, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
-.tab-btn:hover {
-  color: #fff;
+.result-item.full {
+  grid-column: 1 / -1;
 }
 
-.tab-btn.active {
-  background: var(--primary-gradient);
-  color: #fff;
-  box-shadow: 0 4px 15px rgba(16, 185, 129, 0.25);
+.label {
+  font-size: 0.8rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
-.tab-content-panel {
-  min-height: 400px;
+.diet-note {
+  margin-bottom: 12px;
 }
 
-.app-footer {
-  text-align: center;
-  padding: 2rem 0;
-  border-top: 1px solid var(--border-light);
-  color: var(--text-muted);
-  font-size: 0.85rem;
+.macro-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
 }
 
-@media print {
-  .app-container {
-    padding: 0 !important;
-    max-width: 100% !important;
+.macro-grid div {
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+  padding: 10px;
+  display: grid;
+  gap: 4px;
+}
+
+.add-meal-box {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 1.2fr repeat(5, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.custom-food-box {
+  margin-bottom: 14px;
+  padding: 12px;
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.custom-food-row {
+  display: grid;
+  grid-template-columns: 1.4fr repeat(4, minmax(0, 1fr)) auto;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.add-meal-box input {
+  min-width: 0;
+}
+
+.add-btn {
+  background: var(--primary);
+}
+
+.meal-list {
+  display: grid;
+  gap: 10px;
+}
+
+.meal-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 10px;
+}
+
+.meal-editor {
+  flex: 1;
+  display: grid;
+  gap: 8px;
+}
+
+.meal-input, .meal-editor textarea {
+  width: 100%;
+}
+
+.meal-macro-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.meal-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.swap-btn {
+  background: #2563eb;
+}
+
+.remove-btn {
+  background: #ef4444;
+}
+
+@media (max-width: 600px) {
+  .header-row {
+    flex-direction: column;
   }
-  .main-content {
-    margin-bottom: 0 !important;
+
+  .actions {
+    flex-direction: column;
+  }
+
+  .add-meal-box {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .custom-food-row {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .meal-item {
+    flex-direction: column;
+  }
+
+  .meal-macro-row {
+    grid-template-columns: 1fr 1fr;
   }
 }
 </style>
