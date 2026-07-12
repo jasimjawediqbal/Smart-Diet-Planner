@@ -259,35 +259,56 @@ const addCustomFood = (newFood) => {
   foodDatabase.value.push(newFood);
 };
 
-// Local storage state saving and loading
-const loadSavedState = () => {
+// Synchronized State Loading and Saving (MongoDB + LocalStorage fallback)
+const loadSavedState = async () => {
+  // Try loading from MongoDB first
+  try {
+    const response = await fetch('/api/state');
+    if (response.ok) {
+      const data = await response.json();
+      if (data && data._id) {
+        applyState(data);
+        console.log('✅ State restored from MongoDB');
+        return;
+      }
+    }
+  } catch (error) {
+    console.error('Failed to load state from MongoDB, trying localStorage:', error);
+  }
+
+  // Fallback to localStorage
   try {
     const saved = localStorage.getItem('smart_diet_planner_state');
     if (saved) {
       const parsed = JSON.parse(saved);
-      if (parsed.theme) theme.value = parsed.theme;
-      if (parsed.units) units.value = parsed.units;
-      if (parsed.age) age.value = parsed.age;
-      if (parsed.gender) gender.value = parsed.gender;
-      if (parsed.weightKg) weightKg.value = parsed.weightKg;
-      if (parsed.weightLbs) weightLbs.value = parsed.weightLbs;
-      if (parsed.heightCm) heightCm.value = parsed.heightCm;
-      if (parsed.feet) feet.value = parsed.feet;
-      if (parsed.inches) inches.value = parsed.inches;
-      if (parsed.activity) activity.value = parsed.activity;
-      if (parsed.goal) goal.value = parsed.goal;
-      if (parsed.planStyle) planStyle.value = parsed.planStyle;
-      if (parsed.mealsPerDay) mealsPerDay.value = parsed.mealsPerDay;
-      if (parsed.result) result.value = parsed.result;
-      if (parsed.mealPlan) mealPlan.value = normalizeMealPlan(parsed.mealPlan);
-      if (parsed.foodDatabase) foodDatabase.value = parsed.foodDatabase;
+      applyState(parsed);
+      console.log('✅ State restored from LocalStorage');
     }
   } catch (e) {
     console.error('Failed to load state from LocalStorage:', e);
   }
 };
 
-const saveState = () => {
+const applyState = (parsed) => {
+  if (parsed.theme) theme.value = parsed.theme;
+  if (parsed.units) units.value = parsed.units;
+  if (parsed.age) age.value = parsed.age;
+  if (parsed.gender) gender.value = parsed.gender;
+  if (parsed.weightKg) weightKg.value = parsed.weightKg;
+  if (parsed.weightLbs) weightLbs.value = parsed.weightLbs;
+  if (parsed.heightCm) heightCm.value = parsed.heightCm;
+  if (parsed.feet) feet.value = parsed.feet;
+  if (parsed.inches) inches.value = parsed.inches;
+  if (parsed.activity) activity.value = parsed.activity;
+  if (parsed.goal) goal.value = parsed.goal;
+  if (parsed.planStyle) planStyle.value = parsed.planStyle;
+  if (parsed.mealsPerDay) mealsPerDay.value = parsed.mealsPerDay;
+  if (parsed.result) result.value = parsed.result;
+  if (parsed.mealPlan) mealPlan.value = normalizeMealPlan(parsed.mealPlan);
+  if (parsed.foodDatabase) foodDatabase.value = parsed.foodDatabase;
+};
+
+const saveStateLocal = () => {
   const state = {
     theme: theme.value,
     units: units.value,
@@ -307,6 +328,48 @@ const saveState = () => {
     foodDatabase: foodDatabase.value
   };
   localStorage.setItem('smart_diet_planner_state', JSON.stringify(state));
+};
+
+const saveStateRemote = async () => {
+  const state = {
+    theme: theme.value,
+    units: units.value,
+    age: age.value,
+    gender: gender.value,
+    weightKg: weightKg.value,
+    weightLbs: weightLbs.value,
+    heightCm: heightCm.value,
+    feet: feet.value,
+    inches: inches.value,
+    activity: activity.value,
+    goal: goal.value,
+    planStyle: planStyle.value,
+    mealsPerDay: mealsPerDay.value,
+    result: result.value,
+    mealPlan: mealPlan.value,
+    foodDatabase: foodDatabase.value
+  };
+
+  try {
+    await fetch('/api/state', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(state)
+    });
+  } catch (error) {
+    console.error('Failed to sync state to MongoDB:', error);
+  }
+};
+
+let debounceTimeout;
+const saveState = () => {
+  saveStateLocal();
+  if (debounceTimeout) clearTimeout(debounceTimeout);
+  debounceTimeout = setTimeout(() => {
+    saveStateRemote();
+  }, 600);
 };
 
 watch(
