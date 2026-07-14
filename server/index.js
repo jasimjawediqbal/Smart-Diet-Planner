@@ -66,17 +66,35 @@ const DietPlannerStateSchema = new mongoose.Schema({
 const DietPlannerState = mongoose.model('DietPlannerState', DietPlannerStateSchema);
 
 // API Endpoints
+
+// Health Check Endpoint
+app.get('/api/health', async (req, res) => {
+  try {
+    const mongoStatus = mongoose.connection.readyState === 1 ? 'connected' : 'disconnected';
+    res.status(200).json({ 
+      success: true, 
+      message: 'Server is running', 
+      mongodbStatus: mongoStatus,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: 'Health check failed' });
+  }
+});
+
 // Load State
 app.get('/api/state', async (req, res) => {
   try {
     let state = await DietPlannerState.findOne().sort({ updatedAt: -1 });
     if (!state) {
+      console.log('ℹ️  No saved state found in MongoDB');
       return res.status(200).json({ message: "No saved state found", state: null });
     }
+    console.log('✅ State loaded from MongoDB successfully');
     res.status(200).json(state);
   } catch (error) {
-    console.error('Error fetching state:', error);
-    res.status(500).json({ error: 'Server error while fetching state' });
+    console.error('❌ Error fetching state:', error.message);
+    res.status(500).json({ error: 'Server error while fetching state', details: error.message });
   }
 });
 
@@ -84,22 +102,36 @@ app.get('/api/state', async (req, res) => {
 app.post('/api/state', async (req, res) => {
   try {
     const stateData = req.body;
+    console.log('📝 Attempting to save state to MongoDB...');
+    
     let state = await DietPlannerState.findOne();
     
     if (state) {
       // Update existing state
+      console.log('🔄 Updating existing state...');
       Object.assign(state, stateData);
       await state.save();
+      console.log('✅ State updated successfully in MongoDB');
     } else {
       // Create new state
+      console.log('✨ Creating new state...');
       state = new DietPlannerState(stateData);
       await state.save();
+      console.log('✅ New state created and saved to MongoDB');
     }
     
-    res.status(200).json({ success: true, message: 'State saved successfully', state });
+    res.status(200).json({ 
+      success: true, 
+      message: 'State saved successfully to MongoDB', 
+      state,
+      timestamp: new Date().toISOString()
+    });
   } catch (error) {
-    console.error('Error saving state:', error);
-    res.status(500).json({ error: 'Server error while saving state' });
+    console.error('❌ Error saving state:', error.message);
+    res.status(500).json({ 
+      error: 'Server error while saving state', 
+      details: error.message 
+    });
   }
 });
 

@@ -259,33 +259,22 @@ const addCustomFood = (newFood) => {
   foodDatabase.value.push(newFood);
 };
 
-// Synchronized State Loading and Saving (MongoDB + LocalStorage fallback)
+// Load State from MongoDB
 const loadSavedState = async () => {
-  // Try loading from MongoDB first
   try {
+    console.log('🔄 Loading state from MongoDB...');
     const response = await fetch('/api/state');
     if (response.ok) {
       const data = await response.json();
       if (data && data._id) {
         applyState(data);
-        console.log('✅ State restored from MongoDB');
+        console.log('✅ State successfully restored from MongoDB');
         return;
       }
     }
+    console.log('ℹ️  No state found in MongoDB');
   } catch (error) {
-    console.error('Failed to load state from MongoDB, trying localStorage:', error);
-  }
-
-  // Fallback to localStorage
-  try {
-    const saved = localStorage.getItem('smart_diet_planner_state');
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      applyState(parsed);
-      console.log('✅ State restored from LocalStorage');
-    }
-  } catch (e) {
-    console.error('Failed to load state from LocalStorage:', e);
+    console.error('❌ Failed to load state from MongoDB:', error);
   }
 };
 
@@ -306,28 +295,6 @@ const applyState = (parsed) => {
   if (parsed.result) result.value = parsed.result;
   if (parsed.mealPlan) mealPlan.value = normalizeMealPlan(parsed.mealPlan);
   if (parsed.foodDatabase) foodDatabase.value = parsed.foodDatabase;
-};
-
-const saveStateLocal = () => {
-  const state = {
-    theme: theme.value,
-    units: units.value,
-    age: age.value,
-    gender: gender.value,
-    weightKg: weightKg.value,
-    weightLbs: weightLbs.value,
-    heightCm: heightCm.value,
-    feet: feet.value,
-    inches: inches.value,
-    activity: activity.value,
-    goal: goal.value,
-    planStyle: planStyle.value,
-    mealsPerDay: mealsPerDay.value,
-    result: result.value,
-    mealPlan: mealPlan.value,
-    foodDatabase: foodDatabase.value
-  };
-  localStorage.setItem('smart_diet_planner_state', JSON.stringify(state));
 };
 
 const saveStateRemote = async () => {
@@ -351,21 +318,29 @@ const saveStateRemote = async () => {
   };
 
   try {
-    await fetch('/api/state', {
+    const response = await fetch('/api/state', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(state)
     });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error('❌ Failed to save state to MongoDB. Status:', response.status, 'Error:', errorData);
+      return;
+    }
+
+    const result = await response.json();
+    console.log('✅ State successfully saved to MongoDB:', result);
   } catch (error) {
-    console.error('Failed to sync state to MongoDB:', error);
+    console.error('❌ Network error while syncing state to MongoDB:', error);
   }
 };
 
 let debounceTimeout;
 const saveState = () => {
-  saveStateLocal();
   if (debounceTimeout) clearTimeout(debounceTimeout);
   debounceTimeout = setTimeout(() => {
     saveStateRemote();
