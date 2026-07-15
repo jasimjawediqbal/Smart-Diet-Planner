@@ -1,5 +1,6 @@
 <script setup>
 import { computed, ref, watch, onMounted } from 'vue';
+import { loadState as apiLoadState, saveState as apiSaveState } from './utils/api.js';
 
 const theme = ref('dark');
 const units = ref('metric');
@@ -263,14 +264,11 @@ const addCustomFood = (newFood) => {
 const loadSavedState = async () => {
   try {
     console.log('🔄 Loading state from MongoDB...');
-    const response = await fetch('/api/state');
-    if (response.ok) {
-      const data = await response.json();
-      if (data && data._id) {
-        applyState(data);
-        console.log('✅ State successfully restored from MongoDB');
-        return;
-      }
+    const { data } = await apiLoadState();
+    if (data && data._id) {
+      applyState(data);
+      console.log('✅ State successfully restored from MongoDB');
+      return;
     }
     console.log('ℹ️  No state found in MongoDB');
   } catch (error) {
@@ -318,21 +316,7 @@ const saveStateRemote = async () => {
   };
 
   try {
-    const response = await fetch('/api/state', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(state)
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      console.error('❌ Failed to save state to MongoDB. Status:', response.status, 'Error:', errorData);
-      return;
-    }
-
-    const result = await response.json();
+    const { data: result } = await apiSaveState(state);
     console.log('✅ State successfully saved to MongoDB:', result);
   } catch (error) {
     console.error('❌ Network error while syncing state to MongoDB:', error);
